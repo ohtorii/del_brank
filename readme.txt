@@ -45,6 +45,18 @@
         bar  =x+1;   //comment b
         hoge =x+2;   //comment c
 
+・連続した空行の削除
+    （変換前：|はカーソル位置）
+        #include "foo.h"
+        
+        |
+        
+        #include "bar.h"
+    （変換後）
+        #include "foo.h"
+        #include "bar.h"
+
+
 【動作環境】
     秀丸エディタ ver8以降で動作します。
 
