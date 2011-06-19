@@ -1,0 +1,223 @@
+/* カーソル周りの空白を削除する秀丸マクロ
+
+「複数行選択・矩形選択」へ対応しています。
+
+【動作】
+・選択無し
+    （変換前：|はカーソル位置）
+        foo | bar
+    （変換後）
+        foobar
+
+・複数行選択あり
+    （変換前：<>は選択範囲）
+        invoke <foo  bar
+        hoge spam>   fire
+
+    （変換後）
+        invoke foobar
+        hogespam   fire
+
+・矩形選択（その１）
+    （変換前：|は矩形選択の範囲）
+        foo=  |  0;
+        bar=  | 1;
+        hoge= |2;
+    （変換後）
+        foo=0;
+        bar=1;
+        hoge=2;
+
+・矩形選択（その２）
+    （変換前：<>は矩形選択の範囲）
+        foo  =<  x  +  0  >;   //comment a
+        bar  =<  x +  1   >;   //comment b
+        hoge =< x + 2     >;   //comment c
+    （変換後）
+        foo  =x+0;   //comment a
+        bar  =x+1;   //comment b
+        hoge =x+2;   //comment c
+
+
+ohtorii
+http://d.hatena.ne.jp/ohtorii/
+https://github.com/ohtorii
+*/
+
+#g_uspace = 0x3000; //全角空白(unicode)
+
+
+$old_searchbuffer = searchbuffer;
+#old_searchoption = searchoption;
+call _deleteblank;
+setsearch $old_searchbuffer, #old_searchoption;
+endmacro;
+
+
+
+_deleteblank:
+	disabledraw;
+
+	if(rectselecting){
+		call ProcRecSelectiong;
+		return ;
+	}
+
+	if(selecting) {
+		#CurrentX = column;
+		#CurrentY = lineno;
+		begingroupundo;
+		call ReplaceSelectLine;
+		endgroupundo;
+		movetolineno #CurrentX+1, #CurrentY;
+		return ;
+	}
+
+	//空白行なら行を削除する
+	if(0==linelen2){
+		//call DeleteLine;	/*一行削除する*/
+		call DeleteLineUpDown;	/*上下の空白行を削除する*/
+		return ;
+	}
+
+	call DelSingleLine;
+	return;
+
+ProcRecSelectiong:
+	if(seltopx==selendx){
+		//
+		//縦一直線に選択
+		//
+		##old_seltopx	= seltopx;
+		##old_seltopy	= seltopy;
+		##old_selendx	= selendx;
+		##old_selendy	= selendy;
+
+		escape;
+		begingroupundo;
+		##y = ##old_seltopy;
+		while(##y <= ##old_selendy){
+			moveto ##old_seltopx,##y;
+			call DelSingleLine;
+			##y=##y+1;
+		}
+		endgroupundo;
+	}else{
+		##old_seltopx		= seltopx;
+		##old_seltopy		= seltopy;
+		##old_selendx		= selendx;
+		##old_selendy		= selendy;
+		escape;
+		begingroupundo;
+		##y = ##old_seltopy;
+		while(##y <= ##old_selendy){
+			call SelectRange1 ##old_seltopx, ##y, ##old_selendx, ##y;
+			call ReplaceSelectLine;
+			##y=##y+1;
+		}
+		endgroupundo;
+	}
+	return ;
+
+ReplaceSelectLine:
+	//置換は行全体が対象になるので選択の前後に改行挿入する。
+	##old_seltopcolumn	= seltopcolumn;
+	##old_seltoplineno	= seltoplineno;
+	##old_selendcolumn	= selendcolumn;
+	##old_selendlineno	= selendlineno;
+	##num_lines 		= selendlineno - seltoplineno;
+
+	escape;
+	movetolineno 1+##old_selendcolumn,##old_selendlineno;
+	insert "\n";
+
+	movetolineno 1+##old_seltopcolumn,##old_seltoplineno;
+	insert "\n";
+
+	golinetop2;
+	##old_column=column;
+	##old_lineno=lineno;
+
+	call SelectRange2 column, lineno, ##old_selendcolumn, lineno+##num_lines;
+	##old2_seltopcolumn = seltopcolumn;
+	##old2_seltoplineno = seltoplineno;
+	##old2_selendcolumn = selendcolumn;
+	##old2_selendlineno = selendlineno;
+	replaceallfast "[ \\t　]+","", regular, inselect,nohilight;
+
+	movetolineno 1+##old2_selendcolumn,##old2_selendlineno;
+	delete;
+	movetolineno 1+##old2_seltopcolumn,##old2_seltoplineno;
+	backspace;
+	return ;
+
+
+DeleteLine:
+	backspace;
+	down;
+	return;
+
+DeleteLineUpDown:
+	if(linecount2<=1){
+		return ;	//新規作成直後
+	}
+	//上の行を削除する
+	while(0==linelen2){
+		backspace;
+	}
+	down;
+	//下の行を削除する
+	while(0==linelen2){
+		delete;
+	}
+	golinetop2;
+	return ;
+
+DelSingleLine:
+	call SelectWhiteSpace;
+	if(seltopcolumn!=selendcolumn){
+		//選択範囲があれば削除する
+		delete;
+	}
+	return ;
+
+SelectWhiteSpace:
+	// カーソル周りの空白削除
+	while(unicode != 13) { // 13 改行
+		if((unicode == #g_uspace) || (unicode == 32) || (unicode == 9)) { //
+			right;
+		} else {
+			break;
+		}
+	}
+
+	beginsel;
+	while(column > 0){
+		left;
+		if((unicode == #g_uspace) || (unicode == 32) || (unicode == 9)) {
+			continue;
+		} else {
+			right;
+			break;
+		}
+	}
+	endsel;
+	return ;
+
+
+SelectRange1:
+	escape;
+	moveto ##1, ##2;
+	beginsel;
+	moveto ##3, ##4;
+	endsel;
+	return ;
+
+
+SelectRange2:
+	escape;
+	movetolineno 1+##1, ##2;
+	beginsel;
+	movetolineno 1+##3, ##4;
+	endsel;
+	return ;
