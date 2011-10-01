@@ -49,6 +49,10 @@ https://github.com/ohtorii
 
 $old_searchbuffer = searchbuffer;
 #old_searchoption = searchoption;
+//動作環境を固定化する。
+//折りたたみを維持,部分編集を維持,範囲選択,最後に移動
+//マクロ終了時に元に戻る。
+setcompatiblemode 0x0003|0x000c|0x0200|0x2000;
 call _deleteblank;
 setsearch $old_searchbuffer, #old_searchoption;
 endmacro;
